@@ -1,17 +1,66 @@
+<div align="center">
+
+<img src="assets/syncify-icon.svg" alt="Syncify" width="128">
+
 # Syncify
 
-Get songs that aren't on Spotify (unreleased tracks, leaks, live versions) into Spotify on all your computers.
+**Get the songs Spotify doesn't have into Spotify, on every computer you use.**
 
-Search YouTube inside the app, preview the upload, fix the tags, hit **Download**. Syncify rips the best audio to a 320k mp3, tags it (title, artist, album, year, cover art) and drops it in your music folder, which Spotify shows under Local Files. Sign in with Google on your other computers and the song shows up there too.
+[![Download](https://img.shields.io/github/v/release/RitvikNeerattil/Syncify?label=Download&color=1ed760&style=for-the-badge)](https://github.com/RitvikNeerattil/Syncify/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows-0f1115?style=for-the-badge)](#installation)
+[![Website](https://img.shields.io/badge/website-syncify-0f1115?style=for-the-badge)](https://ritvikneerattil.github.io/Syncify/)
 
-## Using it
+</div>
 
-1. Download `Syncify.exe`, put it anywhere, double-click.
-2. **Sign in with Google.**
-3. **Pick your music folder** (defaults to `Music\Syncify`).
-4. In Spotify: Settings → Your Library → **Show Local Files** → **Add a source** → that folder.
+Syncify is a small Windows app for unreleased tracks, leaks, live versions and anything else that isn't on Spotify. Search YouTube inside the app, pick the right upload, hit **Download**, and the song lands in your Spotify Local Files as a properly tagged mp3. Sign in with Google on your other computers and it shows up there too.
 
-That's it. On first launch Syncify also downloads ffmpeg and Deno (about 130 MB, once) in the background, since yt-dlp needs them.
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [How sync works](#how-sync-works)
+- [FAQ](#faq)
+- [Roadmap](#roadmap)
+
+## Features
+
+- **Built-in YouTube search** with an inline preview, so you can pick the right upload without leaving the app. Pasting a link works too.
+- **Best-quality audio** ripped with [yt-dlp](https://github.com/yt-dlp/yt-dlp) and saved as a 320k mp3.
+- **Clean tags**: title, artist, album and year are guessed from the video (junk like `(Official Audio)` is stripped, `(Unreleased)` becomes the album), and you can fix them before saving. The thumbnail becomes square cover art.
+- **Simple file names**: `Song Title.mp3`, nothing else.
+- **Sync across computers** through a folder in *your own* Google Drive. Your PC can be off and your laptop still gets everything.
+- **Edits and deletes sync too**, including renames.
+- **Zero setup for tools**: ffmpeg and Deno are downloaded automatically on first launch.
+- **Quiet background sync** when you log in to Windows.
+
+## Installation
+
+1. Download **`Syncify.exe`** from the [latest release](https://github.com/RitvikNeerattil/Syncify/releases/latest).
+2. Put it anywhere and double-click it.
+
+That's it. On first launch Syncify downloads ffmpeg and Deno (about 130 MB, once) in the background.
+
+> [!NOTE]
+> Windows SmartScreen may warn about an unrecognized app since the exe isn't code-signed. Click **More info → Run anyway**.
+
+## Usage
+
+**First launch** walks you through three steps:
+
+| Step | What to do |
+|---|---|
+| 1. Sign in with Google | Approve in your browser. Syncify can only see files it creates in your Drive. |
+| 2. Pick a music folder | Defaults to `Music\Syncify`. Downloaded songs go here. |
+| 3. Add it to Spotify | Spotify → Settings → Your Library → turn on **Show Local Files** → **Add a source** → pick the folder. |
+
+**Downloading a song**
+
+1. Search on the **Search** tab.
+2. Click a result to preview it and see the guessed tags.
+3. Fix anything that's off, then hit **Download**.
+
+The song appears under **Local Files** in Spotify, and on your other computers the next time Syncify syncs.
+
+**Other computers**: install Syncify, sign in with the same Google account, pick a music folder. Your library gets pulled in automatically.
 
 ## How sync works
 
@@ -25,93 +74,51 @@ That's it. On first launch Syncify also downloads ffmpeg and Deno (about 130 MB,
                            └────────────────────────────┘
 ```
 
-- Syncify makes a `Syncify` folder in your Drive and only ever sees files it created (`drive.file` permission).
-- Each computer writes its own song list to `_sync/`. For every song, the newest change wins. Adds, tag edits (including renames) and deletes all sync. Deleted songs go to a trash folder in app data instead of being wiped.
-- If a song's file isn't in Drive yet, the other computer re-rips it from the saved YouTube link.
-- Old versions of edited or deleted songs are moved to Drive's trash after a day.
-- Syncs on launch, every 10 minutes while open, right after each download, and at Windows login (quietly, no window; on by default, toggle in Settings).
-- Your PC can be off. The laptop pulls straight from Drive.
+- Syncify creates a `Syncify` folder in your Google Drive and only ever sees files it created (the `drive.file` permission).
+- Each computer publishes its own song list. For every song, **the newest change wins**, so adds, tag edits, renames and deletes all carry over.
+- If a song's file hasn't reached Drive yet, the other computer re-rips it from the saved YouTube link.
+- Deleted songs go to a trash folder on your computer, and old versions in Drive are moved to Drive's trash after a day.
+- Sync runs on launch, every 10 minutes while the app is open, right after each download, and at Windows login.
 
-App data (settings, song list, log, trash) lives in `%APPDATA%\Syncify`. The Google login is kept in Windows Credential Manager.
+## FAQ
 
-## Building the exe
+<details>
+<summary><b>Does the developer get my data?</b></summary>
 
-### One-time Google setup (developer only)
+No. There are no Syncify servers. Everything goes directly between your computer, YouTube and your own Google Drive. See the [privacy policy](https://ritvikneerattil.github.io/Syncify/privacy.html).
+</details>
 
-Users never do this. You do it once, and the ID gets baked into the exe.
+<details>
+<summary><b>How much Drive space does it use?</b></summary>
 
-1. Go to [console.cloud.google.com](https://console.cloud.google.com), create a project called Syncify.
-2. **APIs & Services → Library →** enable **Google Drive API**.
-3. **APIs & Services → OAuth consent screen (Google Auth Platform):** app name Syncify, your email as support/developer contact, audience **External**. Scopes: `drive.file`, `userinfo.email`, `openid`.
-4. **Publish the app** (Audience → *Publish app*). In "Testing" mode Google logs everyone out every 7 days. With only these scopes, publishing shouldn't need a Google review.
-5. **Credentials → Create credentials → OAuth client ID → Desktop app.** Download the JSON and save it as `syncify\oauth_client.json`.
+About 8 MB per song, from your own 15 GB of free Google storage (shared with Gmail and Photos).
+</details>
 
-For a desktop app this client "secret" isn't really secret (Google expects it to ship inside the app), but it's gitignored anyway.
+<details>
+<summary><b>The tags are wrong.</b></summary>
 
-### Build
+Tags are guessed from the video title, since leaks rarely have real metadata. Fix them in the form before downloading, or later from the **Library** tab. Edits sync to your other computers.
+</details>
 
-Needs Python 3.12 or 3.13 (pywebview's Windows backend lags behind the newest Python). Then double-click `build.bat`. You get `dist\Syncify.exe`.
+<details>
+<summary><b>Downloads stopped working.</b></summary>
 
-## Developing
+YouTube changes things often. Check **Settings → Tools** that ffmpeg and the JS runtime are green, and update to the latest Syncify release (each build bundles the newest yt-dlp). The log is at `%APPDATA%\Syncify\syncify.log`.
+</details>
 
-```
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements-dev.txt
-python run.py --debug
-pytest
-```
+<details>
+<summary><b>Where does Syncify keep its own files?</b></summary>
 
-Test two "computers" on one machine without Google by giving each its own app data folder and a shared local folder as the sync hub:
-```
-:: terminal 1
-set SYNCIFY_FOLDER_HUB=C:\temp\hub
-set SYNCIFY_HOME=C:\temp\pc
-python run.py
-
-:: terminal 2
-set SYNCIFY_FOLDER_HUB=C:\temp\hub
-set SYNCIFY_HOME=C:\temp\laptop
-python run.py
-```
-Drop `SYNCIFY_FOLDER_HUB` to test the same thing through Google Drive.
-
-The tests cover filename rules, tag guessing and writing, full two-device sync (add, edit/rename, delete, re-rip fallback, name clashes, moving the music folder), and the Google Drive hub against a fake Drive.
-
-## Layout
-
-```
-run.py                   entry point
-syncify/
-  app.py                 window, --sync-only, single-instance lock
-  api.py                 methods the UI calls
-  core.py                ties everything together, download jobs
-  config.py              app data folder + settings
-  google_account.py      Google sign-in, token storage
-  library.py             mp3 files + manifest
-  metadata.py            tag guessing, ID3 read/write, cover art
-  youtube.py             yt-dlp search + mp3 rip
-  tools_setup.py         first-run ffmpeg/Deno download
-  paths.py               safe filenames, stay-inside-the-folder guard
-  startup.py             Windows login sync
-  instance.py            one Syncify at a time
-  sync/engine.py         the sync algorithm
-  sync/drive_hub.py      Google Drive storage
-  sync/hub.py            Hub interface + FolderHub (local testing)
-ui/                      HTML/CSS/JS front end (runs in pywebview)
-assets/                  logo (SVG), app icon (.ico/.png)
-docs/                    homepage, privacy policy, terms (GitHub Pages)
-build.bat                builds dist\Syncify.exe
-```
-
-Built exes go in GitHub Releases, not in the repo (`build/`, `dist/` and `*.spec` are gitignored).
+Settings, the song list, the log and the trash live in `%APPDATA%\Syncify`. Your Google sign-in is stored in Windows Credential Manager. Your music folder only ever contains mp3s.
+</details>
 
 ## Roadmap
 
-- **Android:** Spotify on Android plays files from phone storage ("Show audio files from this device"). An Android app can sign into the same Google account and pull from the same Drive folder, using the same song-list format.
-- Cover art in the Library view from the actual file
-- Playlists
+- [ ] Android app (sign in with Google, pull from the same Drive folder)
+- [ ] Cover art thumbnails in the Library view
+- [ ] Playlists
+- [ ] Code-signed releases (no more SmartScreen warning)
 
-## Note
+## Disclaimer
 
-For your own listening. Downloading from YouTube is against YouTube's terms, so don't share the ripped files.
+Syncify is for personal listening. Downloading from YouTube is against YouTube's terms of service, and you're responsible for respecting copyright. Don't use Syncify to share or sell anyone's music.
