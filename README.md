@@ -8,11 +8,14 @@
 
 [![Download](https://img.shields.io/github/v/release/RitvikNeerattil/Syncify?label=Download&color=1ed760&style=for-the-badge)](https://github.com/RitvikNeerattil/Syncify/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows-0f1115?style=for-the-badge)](#installation)
+[![License: MIT](https://img.shields.io/badge/license-MIT-0f1115?style=for-the-badge)](LICENSE)
 [![Website](https://img.shields.io/badge/website-syncify-0f1115?style=for-the-badge)](https://ritvikneerattil.github.io/Syncify/)
 
 </div>
 
 Syncify is a small Windows app for unreleased tracks, leaks, live versions and anything else that isn't on Spotify. Search YouTube inside the app, pick the right upload, hit **Download**, and the song lands in your Spotify Local Files as a properly tagged mp3. Sign in with Google on your other computers and it shows up there too.
+
+Syncify is **free and open source** under the [MIT license](LICENSE). No accounts, no servers, no tracking, and you can read every line of what it does.
 
 - [Features](#features)
 - [Installation](#installation)
@@ -20,6 +23,7 @@ Syncify is a small Windows app for unreleased tracks, leaks, live versions and a
 - [How sync works](#how-sync-works)
 - [FAQ](#faq)
 - [Roadmap](#roadmap)
+- [Open source](#open-source)
 
 ## Features
 
@@ -118,6 +122,12 @@ Settings, the song list, the log and the trash live in `%APPDATA%\Syncify`. Your
 - [ ] Cover art thumbnails in the Library view
 - [ ] Playlists
 - [ ] Code-signed releases (no more SmartScreen warning)
+
+## Open source
+
+Syncify is released under the [MIT license](LICENSE). Bug reports and ideas are welcome in [Issues](https://github.com/RitvikNeerattil/Syncify/issues). If you want to build it yourself or contribute code, see [DEVELOPMENT.md](DEVELOPMENT.md).
+
+Syncify stands on [yt-dlp](https://github.com/yt-dlp/yt-dlp), [ffmpeg](https://ffmpeg.org), [Deno](https://deno.com), [mutagen](https://github.com/quodlibet/mutagen) and [pywebview](https://github.com/r0x0r/pywebview).
 
 ## Disclaimer
 

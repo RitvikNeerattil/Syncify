@@ -10,7 +10,9 @@ h2 { font-size: 20px; margin: 36px 0 8px; }
 p, li { color: #c9ced8; }
 a { color: var(--accent); }
 .lead { font-size: 19px; color: var(--muted); }
-.btn { display: inline-block; background: var(--accent); color: #06210f; font-weight: 600; padding: 10px 18px; border-radius: 10px; text-decoration: none; margin-top: 8px; }
+.btn { display: inline-block; margin-right: 8px; background: var(--accent); color: #06210f; font-weight: 600; padding: 10px 18px; border-radius: 10px; text-decoration: none; margin-top: 8px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px 20px; margin-top: 24px; }
 footer { margin-top: 56px; color: var(--muted); font-size: 14px; }
 footer a { color: var(--muted); margin-right: 16px; }
+.btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.small { font-size: 14px; color: var(--muted); }
