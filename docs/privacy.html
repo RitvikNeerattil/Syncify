@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Syncify Privacy Policy</title>
+  <link rel="icon" href="logo.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header><img src="logo.svg" alt=""><a href="./">Syncify</a></header>
+  <h1>Privacy Policy</h1>
+  <p class="lead">Last updated September 26, 2026</p>
+
+  <p>Syncify is a desktop app that runs on your computer. It has no servers, no accounts of its own, no analytics and no ads. The developer does not receive any of your data.</p>
+
+  <h2>What Syncify accesses from your Google account</h2>
+  <p>When you choose "Sign in with Google", Syncify asks for:</p>
+  <ul>
+    <li><b>Your email address</b> (<code>userinfo.email</code>, <code>openid</code>), only to show which account you're signed in with.</li>
+    <li><b>Files Syncify creates in your Google Drive</b> (<code>drive.file</code>). Syncify creates a folder called "Syncify" holding your songs and a small song list for each of your computers. It cannot see, read or change any other files in your Drive.</li>
+  </ul>
+
+  <h2>How that data is used</h2>
+  <p>Only to sync your songs between your own computers. Everything goes directly between your computer and Google. Nothing is sent to the developer or to anyone else, and Google user data is never sold, used for advertising, or used to train AI models.</p>
+  <p>Syncify's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+  <h2>What's stored on your computer</h2>
+  <ul>
+    <li>Your settings and song list, in <code>%APPDATA%\Syncify</code>.</li>
+    <li>Your Google sign-in token, in Windows Credential Manager.</li>
+    <li>Your songs, in the music folder you choose.</li>
+  </ul>
+
+  <h2>Other services</h2>
+  <p>Searching and downloading uses YouTube directly from your computer. On first launch Syncify downloads ffmpeg and Deno from their official GitHub releases. Those services have their own privacy policies.</p>
+
+  <h2>Removing your data</h2>
+  <ul>
+    <li>Sign out in Syncify's Settings, or remove Syncify's access at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
+    <li>Delete the "Syncify" folder from your Google Drive.</li>
+    <li>Delete <code>%APPDATA%\Syncify</code> and your music folder on each computer.</li>
+  </ul>
+
+  <h2>Contact</h2>
+  <p>Questions: <a href="mailto:syncify.project@gmail.com">syncify.project@gmail.com</a></p>
+
+  <footer><a href="./">Home</a><a href="terms.html">Terms</a></footer>
+</main>
+</body>
+</html>

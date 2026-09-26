@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Syncify mark, transparent background. Recolor by editing the three colors below. -->
+  <style>
+    .bg   { fill: #0f1115; }
+    .wave { fill: #1ed760; }
+    .sync { fill: none; stroke: #1ed760; stroke-width: 44; stroke-linecap: round; }
+    .head { fill: #1ed760; }
+  </style>
+    <g id="mark">
+    <!-- left half: sound bars -->
+    <rect class="wave" x="84" y="204" width="32" height="104" rx="16"/>
+    <rect class="wave" x="130" y="146" width="32" height="220" rx="16"/>
+    <rect class="wave" x="176" y="178" width="32" height="156" rx="16"/>
+    <rect class="wave" x="222" y="214" width="32" height="84" rx="16"/>
+    <!-- right half: sync arc ending in an arrow -->
+    <path class="sync" d="M 270 98 A 158 158 0 0 1 270 414"/>
+    <path class="head" d="M 208 414 L 280 360 L 280 468 Z" stroke="#1ed760" stroke-width="10" stroke-linejoin="round"/>
+  </g>
+</svg>

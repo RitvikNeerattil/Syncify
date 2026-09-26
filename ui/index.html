@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Syncify</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside class="nav">
+    <div class="brand"><img class="logo" src="logo.svg" alt="">Syncify</div>
+    <button class="nav-btn active" data-view="search">Search</button>
+    <button class="nav-btn" data-view="library">Library <span id="lib-count" class="pill"></span></button>
+    <button class="nav-btn" data-view="settings">Settings</button>
+    <div class="nav-foot">
+      <div id="setup-box" class="setup hidden">
+        <div id="setup-msg" class="small"></div>
+        <div class="bar"><div id="setup-bar"></div></div>
+        <button id="setup-retry" class="ghost small hidden">Retry</button>
+      </div>
+      <div id="sync-status" class="muted small">Not synced yet</div>
+      <button id="sync-btn" class="ghost small">Sync now</button>
+    </div>
+  </aside>
+
+  <main>
+    <!-- SEARCH -->
+    <section id="view-search" class="view active">
+      <form id="search-form" class="searchbar">
+        <input id="q" type="search" placeholder="Search YouTube or paste a link" autocomplete="off" autofocus>
+        <button type="submit" class="primary">Search</button>
+      </form>
+      <div class="split">
+        <div id="results" class="results"><p class="empty">Find the song, pick the right upload, hit Download.</p></div>
+        <div id="panel" class="panel hidden">
+          <div class="player"><iframe id="player" allow="autoplay; encrypted-media" allowfullscreen></iframe></div>
+          <a id="yt-link" class="small muted" target="_blank">Open on YouTube</a>
+          <h3 id="panel-title"></h3>
+          <form id="meta-form" class="meta-form">
+            <label>Title<input name="title" required></label>
+            <label>Artist<input name="artist"></label>
+            <div class="row">
+              <label>Album<input name="album"></label>
+              <label class="narrow">Year<input name="year" inputmode="numeric" maxlength="4"></label>
+            </div>
+            <p class="small muted">Saved as <b id="filename-preview"></b> with the thumbnail as cover art.</p>
+            <button type="submit" class="primary wide" id="dl-btn">Download</button>
+          </form>
+          <p id="panel-loading" class="muted small hidden">Reading video info…</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- LIBRARY -->
+    <section id="view-library" class="view">
+      <div class="lib-head">
+        <input id="lib-filter" type="search" placeholder="Filter your library">
+        <button id="open-folder" class="ghost">Open folder</button>
+      </div>
+      <div id="library" class="library"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view">
+      <div class="card">
+        <h3>Google account</h3>
+        <p class="small muted">Your songs sync through a Syncify folder in your Google Drive, so every computer you sign in on gets them.</p>
+        <div class="row center">
+          <span id="account-line" class="grow"></span>
+          <button id="account-btn" class="ghost"></button>
+        </div>
+        <p id="sync-detail" class="small muted"></p>
+      </div>
+      <div class="card">
+        <h3>Music folder</h3>
+        <p class="small muted">Where your mp3s go. Add this folder in Spotify under Settings, Your Library, Local Files.</p>
+        <div class="row center">
+          <code id="lib-root" class="grow"></code>
+          <button id="open-folder-2" class="ghost">Open</button>
+          <button id="change-folder" class="ghost">Change…</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>This computer</h3>
+        <label>Name (shown to your other devices)<input id="device-name"></label>
+        <label class="check"><input type="checkbox" id="startup"> Sync quietly when I log in to Windows</label>
+      </div>
+      <div class="card">
+        <h3>Tools</h3>
+        <ul id="tools" class="tools"></ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- FIRST RUN -->
+  <div id="onboard" class="onboard hidden">
+    <div class="onboard-card">
+      <div class="brand"><img class="logo" src="logo.svg" alt="">Syncify</div>
+      <div class="step" id="step-account">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Sign in with Google</h3>
+          <p class="small muted">Syncify keeps your songs in a Syncify folder in your Google Drive so all your computers get them. It can only see files it creates.</p>
+          <div class="row center">
+            <button id="ob-signin" class="primary">Sign in with Google</button>
+            <button id="ob-skip" class="ghost small">Skip, just this computer</button>
+          </div>
+          <p id="ob-account-done" class="ok hidden"></p>
+        </div>
+      </div>
+      <div class="step" id="step-folder">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Pick your music folder</h3>
+          <p class="small muted">Downloaded songs go here.</p>
+          <code id="ob-folder"></code>
+          <div class="row center" style="margin-top:10px">
+            <button id="ob-use-folder" class="primary">Use this folder</button>
+            <button id="ob-choose-folder" class="ghost">Choose another…</button>
+          </div>
+        </div>
+      </div>
+      <div class="step" id="step-spotify">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Add it to Spotify</h3>
+          <p class="small muted">In Spotify: Settings → Your Library → turn on <b>Show Local Files</b> → <b>Add a source</b> → pick the folder above. Your songs show up under Local Files.</p>
+          <button id="ob-done" class="primary">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="jobs" class="jobs"></div>
+  <div id="toast" class="toast hidden"></div>
+
+  <dialog id="edit-dialog">
+    <form method="dialog" id="edit-form" class="meta-form">
+      <h3>Edit song</h3>
+      <label>Title<input name="title" required></label>
+      <label>Artist<input name="artist"></label>
+      <div class="row">
+        <label>Album<input name="album"></label>
+        <label class="narrow">Year<input name="year" maxlength="4"></label>
+      </div>
+      <div class="row end">
+        <button value="cancel" class="ghost" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

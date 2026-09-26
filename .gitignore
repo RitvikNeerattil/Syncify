@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+build/
+dist/
+*.spec
+# Google OAuth client (baked into the exe at build time; keep it out of git)
+syncify/oauth_client.json
+client_secret*.json
