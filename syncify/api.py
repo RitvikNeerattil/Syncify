@@ -53,19 +53,27 @@ class Api:
             "tools": a.tools(),
             "setup": {**a.tool_setup.status, "missing": a.tool_setup.missing()},
             "last_sync": a.last_sync,
-            "startup": {"supported": startup.supported(), "enabled": startup.is_enabled()},
+            "sync_progress": a.sync_progress,
+            "devices": a.devices,
+            "removed_notice": a.removed_notice,
+            "startup": {"supported": startup.supported(), "enabled": startup.is_enabled(),
+                        "notify": a.settings.notify_login_sync},
         }
 
     # ---------- account ----------
     @_safe
     def sign_in(self):
-        email = self._app.account.sign_in()
+        email = self._app.sign_in()
         threading.Thread(target=self._app.sync_now, daemon=True).start()
         return email
 
     @_safe
+    def remove_device(self, device_id: str):
+        self._app.remove_device(device_id)
+
+    @_safe
     def sign_out(self):
-        self._app.account.sign_out()
+        self._app.sign_out()
 
     # ---------- music folder ----------
     @_safe
@@ -127,6 +135,11 @@ class Api:
         return self._app.require_library().update_meta(song_id, SongMeta.from_dict(meta))
 
     @_safe
+    def rescan_folder(self):
+        """Pick up mp3s added to the music folder outside Syncify. Returns how many were added."""
+        return len(self._app.require_library().scan_folder())
+
+    @_safe
     def delete_song(self, song_id: str):
         self._app.require_library().delete(song_id)
 
@@ -143,6 +156,18 @@ class Api:
     @_safe
     def retry_setup(self):
         self._app.tool_setup.start()
+
+    @_safe
+    def take_open_page(self):
+        """The page to open first (from a notification click); only returned once."""
+        page, self._app.open_page = self._app.open_page, ""
+        return page
+
+    @_safe
+    def set_login_notify(self, enabled: bool):
+        self._app.settings.notify_login_sync = bool(enabled)
+        self._app.dirs.save_settings(self._app.settings)
+        return self._app.settings.notify_login_sync
 
     @_safe
     def set_startup(self, enabled: bool):

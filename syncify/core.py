@@ -14,6 +14,7 @@ from .google_account import GoogleAccount
 from .library import Library
 from .metadata import SongMeta, fetch_cover, guess_from_info, write_tags
 from .sync import DriveHub, FolderHub, SyncReport, sync
+from .sync.engine import DeviceRemoved
 from .tools_setup import ToolSetup
 from .youtube import YouTube, best_thumbnail, tool_status
 
@@ -26,11 +27,17 @@ class Syncify:
         self.settings = self.dirs.load_settings()
         self.account = GoogleAccount(self.dirs, self.settings)
         self.library: Library | None = Library(self.dirs, self.settings) if self.settings.library_path else None
+        if self.library:
+            self.library.scan_folder()
         self.yt = YouTube(self.dirs.bin)
         self.tool_setup = ToolSetup(self.dirs.bin)
         self.jobs: dict[str, dict] = {}
         self._sync_lock = threading.Lock()
         self.last_sync: dict = {"at": None, "message": "Not synced yet", "ok": None}
+        self.sync_progress: str = ""  # non-empty while a sync is running
+        self.devices: list[dict] = []  # from the last sync
+        self.removed_notice: str = ""
+        self.open_page: str = ""  # page to show first (set when opened from a notification)
 
     # ---------- status ----------
     def tools(self) -> dict:
@@ -44,10 +51,13 @@ class Syncify:
     def set_library_path(self, path: str) -> int:
         """First-time pick, or move every managed song to a new folder. Returns songs moved."""
         if self.library:
-            return self.library.relocate(Path(path))
+            moved = self.library.relocate(Path(path))
+            self.library.scan_folder()  # the new folder may already have songs in it
+            return moved
         self.settings.library_path = str(Path(path).expanduser().resolve())
         self.dirs.save_settings(self.settings)
         self.library = Library(self.dirs, self.settings)
+        self.library.scan_folder()
         return 0
 
     def _hub(self):
@@ -131,17 +141,69 @@ class Syncify:
         if not self._sync_lock.acquire(blocking=False):
             return {**self.last_sync, "message": "Sync already running"}
         try:
+            self.sync_progress = "Starting"
             hub = self._hub()
             if hub is None:
                 self.last_sync = {"at": None, "message": "Sign in with Google to sync", "ok": None}
                 return self.last_sync
-            report: SyncReport = sync(self.library, hub, self.redownload)
-            others = f" · {len(report.devices)} other device(s) on hub" if report.devices else ""
-            self.last_sync = {"at": time.time(), "message": report.summary() + others, "ok": not report.failed,
+
+            def progress(msg):
+                self.sync_progress = msg
+
+            report: SyncReport = sync(self.library, hub, self.redownload, progress, platform=_platform())
+            self.devices = report.device_list
+            self.last_sync = {"at": time.time(), "message": report.summary(), "ok": not report.failed,
                               "failed": report.failed}
+        except DeviceRemoved as e:
+            log.info("this device was removed by %s", e.by)
+            try:
+                hub.delete_catalog(self.settings.device_id)
+            except Exception:
+                pass
+            self.account.sign_out()
+            self.devices = []
+            self.removed_notice = f"This computer was removed from Syncify by {e.by}. Sign in again to keep syncing."
+            self.last_sync = {"at": None, "message": self.removed_notice, "ok": False}
         except Exception as e:
             log.exception("sync failed")
             self.last_sync = {"at": time.time(), "message": f"Sync failed: {e}", "ok": False}
         finally:
+            self.sync_progress = ""
             self._sync_lock.release()
         return self.last_sync
+
+    # ---------- account + devices ----------
+    def sign_in(self) -> str:
+        email = self.account.sign_in()
+        self.removed_notice = ""
+        try:  # if another device had removed this one, signing in brings it back
+            DriveHub(self.account.session()).unremove_device(self.settings.device_id)
+        except Exception:
+            log.exception("couldn't clear removed flag")
+        return email
+
+    def sign_out(self) -> None:
+        """Sign this computer out. It drops off the device list on your other computers; songs stay."""
+        try:
+            hub = self._hub()
+            if hub:
+                hub.delete_catalog(self.settings.device_id)
+        except Exception:
+            log.exception("couldn't remove this device's song list from Drive")
+        self.account.sign_out()
+        self.devices = []
+
+    def remove_device(self, device_id: str) -> None:
+        if device_id == self.settings.device_id:
+            raise ValueError("To remove this computer, use Sign out")
+        hub = self._hub()
+        if hub is None:
+            raise RuntimeError("Sign in with Google first")
+        hub.remove_device(device_id, by=self.settings.device_name)
+        self.devices = [d for d in self.devices if d["id"] != device_id]
+
+
+def _platform() -> str:
+    import platform
+
+    return f"{platform.system()} {platform.release()}".strip()

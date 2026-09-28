@@ -29,8 +29,9 @@ Syncify is **free and open source** under the [MIT license](LICENSE). No account
 
 - **Built-in YouTube search** with an inline preview, so you can pick the right upload without leaving the app. Pasting a link works too.
 - **Best-quality audio** ripped with [yt-dlp](https://github.com/yt-dlp/yt-dlp) and saved as a 320k mp3.
-- **Clean tags**: title, artist, album and year are guessed from the video (junk like `(Official Audio)` is stripped, `(Unreleased)` becomes the album), and you can fix them before saving. The thumbnail becomes square cover art.
+- **Clean tags**: title, artist and year are guessed from the video (junk like `(Official Audio)` is stripped, and it figures out whether the upload is "Artist - Song" or "Song - Artist"). Fix anything before saving, or hit **Swap**. The thumbnail becomes square cover art.
 - **Simple file names**: `Song Title.mp3`, nothing else.
+- **Brings your existing songs along**: mp3s already in your music folder are added to your library and synced too.
 - **Sync across computers** through a folder in *your own* Google Drive. Your PC can be off and your laptop still gets everything.
 - **Edits and deletes sync too**, including renames.
 - **Zero setup for tools**: ffmpeg and Deno are downloaded automatically on first launch.
@@ -101,7 +102,7 @@ About 8 MB per song, from your own 15 GB of free Google storage (shared with Gma
 <details>
 <summary><b>The tags are wrong.</b></summary>
 
-Tags are guessed from the video title, since leaks rarely have real metadata. Fix them in the form before downloading, or later from the **Library** tab. Edits sync to your other computers.
+Tags are guessed from the video title, since leaks rarely have real metadata. If title and artist are flipped, hit **Swap**. You can fix anything in the form before downloading, or later from the **Library** tab. Edits sync to your other computers.
 </details>
 
 <details>

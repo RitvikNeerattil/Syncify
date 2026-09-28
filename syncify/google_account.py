@@ -28,11 +28,70 @@ _KEYRING_SERVICE = "Syncify"
 _KEYRING_USER = "google-refresh-token"
 os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")  # Google reorders scopes in its reply
 
-_SUCCESS_PAGE = (
-    "<html><body style='font-family:Segoe UI,sans-serif;background:#0f1115;color:#e8eaef;"
-    "display:flex;align-items:center;justify-content:center;height:100vh;margin:0'>"
-    "<div style='text-align:center'><h2>Signed in to Syncify</h2><p>You can close this tab.</p></div></body></html>"
+_LOGO = (
+    '<svg viewBox="0 0 512 512" width="64" height="64"><g fill="#1ed760">'
+    '<rect x="84" y="204" width="32" height="104" rx="16"/><rect x="130" y="146" width="32" height="220" rx="16"/>'
+    '<rect x="176" y="178" width="32" height="156" rx="16"/><rect x="222" y="214" width="32" height="84" rx="16"/>'
+    '<path d="M 208 414 L 280 360 L 280 468 Z"/></g><path d="M 270 98 A 158 158 0 0 1 270 414" fill="none" '
+    'stroke="#1ed760" stroke-width="44" stroke-linecap="round"/></svg>'
 )
+
+
+def _result_page(title: str, body: str) -> bytes:
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'><title>Syncify</title></head>"
+        "<body style='font-family:Segoe UI,system-ui,sans-serif;background:#0f1115;color:#e8eaef;"
+        "display:flex;align-items:center;justify-content:center;height:100vh;margin:0'>"
+        f"<div style='text-align:center'>{_LOGO}<h2 style='margin:16px 0 6px'>{title}</h2>"
+        f"<p style='color:#8b93a3;margin:0'>{body}</p></div></body></html>"
+    ).encode()
+
+
+def catch_redirect(open_url, timeout: float = 300) -> str:
+    """Start a one-shot web server on 127.0.0.1, call open_url(redirect_uri) (which sends the user
+    to Google), and return the full URL Google redirects back to. Shows a proper page in the browser."""
+    import http.server
+    import threading
+    import urllib.parse
+
+    got: dict = {}
+    done = threading.Event()
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            if "code" not in q and "error" not in q:  # favicon etc.
+                self.send_response(404)
+                self.end_headers()
+                return
+            got["uri"] = f"http://127.0.0.1:{self.server.server_port}{self.path}"
+            got["error"] = (q.get("error") or [""])[0]
+            if got["error"]:
+                page = _result_page("Sign in cancelled", "You can close this tab and try again in Syncify.")
+            else:
+                page = _result_page("Signed in to Syncify", "You can close this tab and go back to the app.")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(page)))
+            self.end_headers()
+            self.wfile.write(page)
+            done.set()
+
+        def log_message(self, *args):  # keep the console/log quiet
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        open_url(f"http://127.0.0.1:{server.server_port}/")
+        if not done.wait(timeout):
+            raise RuntimeError("Sign in timed out. Try again.")
+    finally:
+        server.shutdown()
+        server.server_close()
+    if got.get("error"):
+        raise RuntimeError("Sign in was cancelled" if got["error"] == "access_denied" else f"Google said: {got['error']}")
+    return got["uri"]
 
 
 def client_config_path() -> Path:
@@ -66,11 +125,19 @@ class GoogleAccount:
 
         if not self.configured():
             raise RuntimeError("This build has no Google client ID (syncify/oauth_client.json). See README.")
+        import webbrowser
+
         flow = InstalledAppFlow.from_client_secrets_file(str(client_config_path()), SCOPES)
-        creds = flow.run_local_server(
-            port=0, open_browser=True, timeout_seconds=300, prompt="consent",
-            success_message=_SUCCESS_PAGE, authorization_prompt_message="",
-        )
+
+        def open_consent(redirect_uri):
+            flow.redirect_uri = redirect_uri
+            url, _ = flow.authorization_url(access_type="offline", prompt="consent")
+            webbrowser.open(url, new=1, autoraise=True)
+
+        response_uri = catch_redirect(open_consent)
+        # oauthlib insists on https in the response URL; the loopback redirect is http by design
+        flow.fetch_token(authorization_response=response_uri.replace("http://", "https://", 1))
+        creds = flow.credentials
         if not creds.refresh_token:
             raise RuntimeError("Google didn't return a refresh token, try signing in again")
         self._store_refresh_token(creds.refresh_token)

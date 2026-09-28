@@ -26,7 +26,34 @@ class Hub(ABC):
         """{device_id: {"device_name": str, "songs": {song_id: entry}}} for every device."""
 
     @abstractmethod
-    def write_catalog(self, device_id: str, device_name: str, songs: dict[str, dict]) -> None: ...
+    def write_catalog(self, device_id: str, device_name: str, songs: dict[str, dict], *,
+                      synced_at: float | None = None, platform: str = "") -> None: ...
+
+    # ---- devices ----
+    @abstractmethod
+    def read_removed(self) -> dict[str, dict]:
+        """{device_id: {"by": device name, "at": timestamp}} for devices removed from the account."""
+
+    @abstractmethod
+    def _write_removed(self, removed: dict[str, dict]) -> None: ...
+
+    @abstractmethod
+    def delete_catalog(self, device_id: str) -> None: ...
+
+    def remove_device(self, device_id: str, by: str) -> None:
+        """Sign a device out of Syncify remotely: it notices on its next sync. Its files are untouched."""
+        import time
+
+        removed = self.read_removed()
+        removed[device_id] = {"by": by, "at": time.time()}
+        self._write_removed(removed)
+        self.delete_catalog(device_id)
+
+    def unremove_device(self, device_id: str) -> None:
+        """Called when a removed device signs in again."""
+        removed = self.read_removed()
+        if removed.pop(device_id, None) is not None:
+            self._write_removed(removed)
 
     @abstractmethod
     def has_blob(self, sha: str) -> bool: ...
@@ -59,8 +86,24 @@ class FolderHub(Hub):
                 continue  # half-synced file; we'll get it next time
         return out
 
-    def write_catalog(self, device_id, device_name, songs):
-        write_json_atomic(self.catalog / f"{device_id}.json", {"device_name": device_name, "songs": songs})
+    def write_catalog(self, device_id, device_name, songs, *, synced_at=None, platform=""):
+        write_json_atomic(self.catalog / f"{device_id}.json", {
+            "device_name": device_name, "synced_at": synced_at, "platform": platform, "songs": songs})
+
+    def read_removed(self):
+        f = self.path / "removed.json"
+        try:
+            return json.loads(f.read_text("utf-8")) if f.exists() else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _write_removed(self, removed):
+        write_json_atomic(self.path / "removed.json", removed)
+
+    def delete_catalog(self, device_id):
+        f = self.catalog / f"{device_id}.json"
+        if f.exists():
+            f.unlink()
 
     def _blob(self, sha: str) -> Path:
         return self.files / f"{sha}.mp3"

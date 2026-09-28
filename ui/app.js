@@ -13,12 +13,51 @@ async function call(name, ...args) {
   return res.data;
 }
 
-function toast(msg, ms = 3200) {
+// toast("text") or toast("text", 5000, { kind: "ok" | "bad", action: "View", onClick })
+function toast(msg, ms = 3200, opts = {}) {
   const t = $("#toast");
   t.textContent = msg;
-  t.classList.remove("hidden");
+  t.className = "toast";
+  if (opts.kind) t.classList.add(opts.kind);
+  t.onclick = null;
+  if (opts.onClick) {
+    t.classList.add("clickable");
+    if (opts.action) {
+      const a = document.createElement("a");
+      a.textContent = opts.action;
+      t.appendChild(a);
+    }
+    t.onclick = () => {
+      t.classList.add("hidden");
+      opts.onClick();
+    };
+  }
   clearTimeout(toast._t);
   toast._t = setTimeout(() => t.classList.add("hidden"), ms);
+}
+
+function showView(name) {
+  $$(".nav-btn").forEach((x) => x.classList.toggle("active", x.dataset.view === name));
+  $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
+}
+
+// One-time popup with the result of the sync that runs when the app opens.
+let launchPending = true;
+function announceLaunchSync() {
+  if (!launchPending || !state || state.sync_progress) return;
+  if (state.removed_notice) {
+    launchPending = false;
+    return toast(state.removed_notice, 9000, { kind: "bad", action: "Settings", onClick: () => showView("settings") });
+  }
+  const s = state.last_sync;
+  if (!s || !s.at) return; // not synced yet this session (or not signed in)
+  launchPending = false;
+  if (s.ok === false) {
+    toast("Sync failed.", 9000, { kind: "bad", action: "See why in Settings", onClick: () => showView("settings") });
+  } else {
+    const detail = s.message.startsWith("Everything") ? "everything's up to date" : s.message;
+    toast(`✓ Sync worked, ${detail}`, 4500, { kind: "ok" });
+  }
 }
 
 function ago(ts) {
@@ -32,8 +71,7 @@ function ago(ts) {
 // ---------- navigation ----------
 $$(".nav-btn").forEach((b) =>
   b.addEventListener("click", () => {
-    $$(".nav-btn").forEach((x) => x.classList.toggle("active", x === b));
-    $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${b.dataset.view}`));
+    showView(b.dataset.view);
     if (b.dataset.view !== "search") refresh();
   })
 );
@@ -42,17 +80,97 @@ $$(".nav-btn").forEach((b) =>
 async function refresh() {
   state = await call("state");
   $("#lib-count").textContent = state.songs.length || "";
-  renderSync(state.last_sync);
+  renderSync(state.last_sync, state.sync_progress);
+  announceLaunchSync();
   renderSetup(state.setup);
   renderLibrary();
   renderSettings();
 }
 
-function renderSync(s) {
+// Two-step button: first click turns it red ("Sure?"), second click within 3s runs it.
+function armConfirm(btn, onConfirm) {
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (!btn.classList.contains("confirm")) {
+      const label = btn.textContent;
+      btn.classList.add("confirm");
+      btn.textContent = "Sure?";
+      clearTimeout(btn._t);
+      btn._t = setTimeout(() => {
+        btn.classList.remove("confirm");
+        btn.textContent = label;
+      }, 3000);
+      return;
+    }
+    clearTimeout(btn._t);
+    btn.disabled = true;
+    try {
+      await onConfirm();
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+}
+
+let syncPoll = null;
+function renderSync(s, progress) {
   if (!s) return;
-  $("#sync-status").textContent = s.at ? `${s.ok === false ? "⚠ " : ""}Synced ${ago(s.at)}` : s.message;
-  $("#sync-status").title = s.message;
-  $("#sync-detail").textContent = s.at ? `Last sync ${ago(s.at)}: ${s.message}` : s.message || "";
+  const st = $("#sync-status");
+  st.classList.toggle("syncing", !!progress);
+  if (progress) {
+    st.textContent = `Syncing: ${progress}`;
+    $("#sync-detail").textContent = `Syncing: ${progress}`;
+  } else {
+    st.textContent = s.at ? `${s.ok === false ? "⚠ " : ""}Synced ${ago(s.at)}` : s.message;
+    const problems = (s.failed || []).length ? ` Problems: ${s.failed.join("; ")}` : "";
+    $("#sync-detail").textContent = (s.at ? `Last sync ${ago(s.at)}: ${s.message}` : s.message || "") + problems;
+  }
+  st.title = progress || s.message;
+  // poll quickly while a sync is running so progress stays live
+  if (progress && !syncPoll) syncPoll = setInterval(refresh, 1500);
+  if (!progress && syncPoll) {
+    clearInterval(syncPoll);
+    syncPoll = null;
+  }
+}
+
+function ago2(ts) {
+  return ts ? ago(ts) : "never";
+}
+
+let devKey = "";
+function renderDevices() {
+  const list = $("#devices");
+  const card = $("#devices-card");
+  card.classList.toggle("hidden", !state.account.signed_in);
+  const key = JSON.stringify(state.devices) + Math.floor(Date.now() / 60000);
+  if (key === devKey) return;
+  devKey = key;
+  if (!state.devices.length) {
+    list.innerHTML = `<li class="muted small">Shows up after the first sync.</li>`;
+    return;
+  }
+  list.innerHTML = state.devices
+    .map(
+      (d) => `
+    <li data-id="${esc(d.id)}">
+      <div class="dev">
+        <div><b>${esc(d.name)}</b>${d.this_device ? `<span class="me">this computer</span>` : ""}</div>
+        <div class="small muted">${d.songs} song${d.songs === 1 ? "" : "s"} · last synced ${esc(ago2(d.synced_at))}${d.platform ? " · " + esc(d.platform) : ""}</div>
+      </div>
+      ${d.this_device ? "" : `<button class="ghost danger">Remove</button>`}
+    </li>`
+    )
+    .join("");
+  $$("#devices li[data-id] button").forEach((b) => {
+    const id = b.closest("li").dataset.id;
+    const name = state.devices.find((d) => d.id === id)?.name;
+    armConfirm(b, async () => {
+      await call("remove_device", id);
+      toast(`Removed ${name}. It'll be signed out the next time it opens Syncify.`, 5000);
+      refresh();
+    });
+  });
 }
 
 let setupTimer = null;
@@ -192,12 +310,95 @@ async function pollJobs() {
 // ---------- library ----------
 $("#lib-filter").addEventListener("input", renderLibrary);
 $("#open-folder").addEventListener("click", () => call("open_folder"));
+$("#rescan").addEventListener("click", async () => {
+  try {
+    const n = await call("rescan_folder");
+    toast(n ? `Added ${n} song(s) from your folder` : "No new songs in your folder");
+    refresh();
+  } catch (err) {
+    toast(err.message);
+  }
+});
 
+// Swap title and artist (for uploads named "Song - Artist")
+$$(".swap").forEach((b) =>
+  b.addEventListener("click", () => {
+    const f = b.closest("form").elements;
+    [f.title.value, f.artist.value] = [f.artist.value, f.title.value];
+    if (b.closest("#meta-form")) updateFilename();
+  })
+);
+
+// ---- sorting ----
+const SORT_DEFAULT_DIR = { added: "desc", title: "asc", artist: "asc", year: "desc", duration: "desc", size: "desc" };
+let libSort = { key: "added", dir: "desc" };
+try {
+  libSort = JSON.parse(localStorage.getItem("syncify.sort")) || libSort;
+} catch (e) {}
+
+function setSort(key, dir) {
+  libSort = { key, dir: dir || SORT_DEFAULT_DIR[key] || "asc" };
+  try {
+    localStorage.setItem("syncify.sort", JSON.stringify(libSort));
+  } catch (e) {}
+  libKey = "";
+  renderLibrary();
+}
+
+function sortSongs(songs) {
+  const { key, dir } = libSort;
+  const val = (s) => {
+    if (key === "added") return s.added_at || 0;
+    if (key === "year") return parseInt(s.year) || 0;
+    if (key === "duration" || key === "size") return s[key] || 0;
+    return (s[key] || "").toLowerCase();
+  };
+  const sign = dir === "asc" ? 1 : -1;
+  return [...songs].sort((a, b) => {
+    const x = val(a), y = val(b);
+    if (x < y) return -sign;
+    if (x > y) return sign;
+    return (a.title || "").localeCompare(b.title || ""); // stable tie-break
+  });
+}
+
+const fmtLen = (sec) => (sec ? `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}` : "–");
+const fmtSize = (b) => (b ? `${(b / 1048576).toFixed(1)} MB` : "–");
+
+$("#lib-sort").addEventListener("change", (e) => setSort(e.target.value));
+$("#lib-dir").addEventListener("click", () => setSort(libSort.key, libSort.dir === "asc" ? "desc" : "asc"));
+$$("#lib-cols [data-sort]").forEach((h) =>
+  h.addEventListener("click", () => {
+    const k = h.dataset.sort;
+    // clicking the active column flips direction, a new column starts at its natural direction
+    if (libSort.key === k) setSort(k, libSort.dir === "asc" ? "desc" : "asc");
+    else setSort(k);
+  })
+);
+
+let libKey = "";
 function renderLibrary() {
   if (!state) return;
   const q = $("#lib-filter").value.toLowerCase();
-  const songs = state.songs.filter((s) => !q || `${s.title} ${s.artist} ${s.album}`.toLowerCase().includes(q));
+  const key = q + JSON.stringify(libSort) + JSON.stringify(state.songs);
+  if (key === libKey) return; // unchanged: don't wipe hover/confirm state
+  libKey = key;
+  $("#lib-sort").value = libSort.key;
+  $("#lib-dir").textContent = libSort.dir === "asc" ? "↑" : "↓";
+  $("#lib-dir").title = libSort.dir === "asc" ? "Ascending (click to reverse)" : "Descending (click to reverse)";
+  $$("#lib-cols [data-sort]").forEach((h) => {
+    const on = h.dataset.sort === libSort.key;
+    h.classList.toggle("sorted", on);
+    h.textContent = h.textContent.replace(/ [↑↓]$/, "") + (on ? (libSort.dir === "asc" ? " ↑" : " ↓") : "");
+  });
+  const songs = sortSongs(state.songs.filter((s) => !q || `${s.title} ${s.artist} ${s.album}`.toLowerCase().includes(q)));
   const box = $("#library");
+  $("#lib-cols").classList.toggle("hidden", !songs.length);
+  const totalSec = songs.reduce((t, s) => t + (s.duration || 0), 0);
+  const totalBytes = songs.reduce((t, s) => t + (s.size || 0), 0);
+  $("#lib-total").textContent = songs.length
+    ? `${songs.length} song${songs.length === 1 ? "" : "s"} · ${Math.floor(totalSec / 3600) ? Math.floor(totalSec / 3600) + " h " : ""}${Math.round((totalSec % 3600) / 60)} min · ${(totalBytes / 1073741824 >= 1 ? (totalBytes / 1073741824).toFixed(2) + " GB" : (totalBytes / 1048576).toFixed(0) + " MB")}`
+    : "";
   if (!songs.length) {
     box.innerHTML = `<p class="empty">${state.songs.length ? "No matches." : "Nothing here yet. Go find something in Search."}</p>`;
     return;
@@ -206,10 +407,12 @@ function renderLibrary() {
     .map(
       (s) => `
     <div class="song" data-id="${esc(s.id)}">
-      <img src="${s.video_id ? `https://i.ytimg.com/vi/${esc(s.video_id)}/default.jpg` : ""}" alt="">
+      ${s.video_id ? `<img src="https://i.ytimg.com/vi/${esc(s.video_id)}/default.jpg" alt="">` : `<div class="ph">♪</div>`}
       <div><div class="t">${esc(s.title)}</div><div class="sub small muted">${esc(s.filename)}</div></div>
       <div class="sub muted">${esc(s.artist)}${s.album ? " · " + esc(s.album) : ""}</div>
-      <div class="muted small">${esc(s.year)} ${s.present ? "" : `<div class="missing">not on this device yet</div>`}</div>
+      <div class="muted small">${esc(s.year)}</div>
+      <div class="muted small num">${fmtLen(s.duration)}</div>
+      <div class="muted small num">${s.present ? fmtSize(s.size) : `<span class="missing">not here yet</span>`}</div>
       <div class="actions">
         <button class="ghost" data-act="edit">Edit</button>
         <button class="ghost danger" data-act="delete">Delete</button>
@@ -220,14 +423,7 @@ function renderLibrary() {
   $$(".song", box).forEach((row) => {
     const song = state.songs.find((s) => s.id === row.dataset.id);
     $("[data-act=edit]", row).addEventListener("click", () => openEdit(song));
-    $("[data-act=delete]", row).addEventListener("click", async (e) => {
-      const btn = e.currentTarget;
-      if (btn.dataset.confirm !== "1") {
-        btn.dataset.confirm = "1";
-        btn.textContent = "Sure?";
-        setTimeout(() => { btn.dataset.confirm = ""; btn.textContent = "Delete"; }, 3000);
-        return;
-      }
+    armConfirm($("[data-act=delete]", row), async () => {
       await call("delete_song", song.id);
       toast(`Deleted "${song.title}" (also removes it from your other devices on next sync)`);
       refresh();
@@ -271,6 +467,9 @@ function renderSettings() {
   const st = $("#startup");
   st.checked = state.startup.enabled;
   st.disabled = !state.startup.supported;
+  const ln = $("#login-notify");
+  ln.checked = state.startup.notify;
+  ln.disabled = !state.startup.supported || !state.startup.enabled;
   const t = state.tools;
   const js = t.deno ? ["Deno", t.deno] : t.node ? ["Node", t.node] : null;
   $("#tools").innerHTML = [
@@ -278,8 +477,17 @@ function renderSettings() {
     ["ffmpeg", t.ffmpeg, t.ffmpeg || (state.setup.running ? "downloading…" : "missing")],
     ["JS runtime", js, js ? `${js[0]}: ${js[1]}` : (state.setup.running ? "downloading…" : "missing (YouTube needs it)")],
   ]
-    .map(([name, ok, detail]) => `<li><span>${name}</span><span class="small ${ok ? "ok" : "bad"}">${esc(detail)}</span></li>`)
+    .map(([name, ok, detail]) => {
+      const isPath = ok && /[\\/]/.test(detail);
+      const label = !ok ? detail : isPath ? "Ready" : detail;
+      const path = isPath ? detail.replace(/^(Deno|Node): /, "") : "";
+      return `<li><span>${name}</span><span class="val small ${ok ? "ok" : "bad"}">${esc(label)}${path ? `<span class="path" title="${esc(path)}">${esc(path)}</span>` : ""}</span></li>`;
+    })
     .join("");
+  renderDevices();
+  const rn = $("#removed-notice");
+  rn.textContent = state.removed_notice || "";
+  rn.classList.toggle("hidden", !state.removed_notice);
 }
 
 async function signIn(btn) {
@@ -318,6 +526,13 @@ $("#change-folder").addEventListener("click", async () => {
     const r = await call("set_music_folder", path);
     toast(r.moved ? `Moved ${r.moved} song(s) to the new folder. Point Spotify at it too.` : "Music folder updated. Point Spotify at it too.", 6000);
     refresh();
+  } catch (err) {
+    toast(err.message);
+  }
+});
+$("#login-notify").addEventListener("change", async (e) => {
+  try {
+    e.target.checked = await call("set_login_notify", e.target.checked);
   } catch (err) {
     toast(err.message);
   }
@@ -389,7 +604,14 @@ $("#ob-use-folder").addEventListener("click", async () => {
     toast(err.message);
   }
 });
-$("#ob-done").addEventListener("click", () => {
+$("#ob-done").addEventListener("click", async () => {
+  if (state.startup.supported) {
+    try {
+      await call("set_startup", $("#ob-startup").checked);
+    } catch (err) {
+      toast(err.message);
+    }
+  }
   $("#onboard").classList.add("hidden");
   refresh();
 });
@@ -399,7 +621,12 @@ window.addEventListener("pywebviewready", async () => {
   await refresh();
   if (!state.library_root) {
     renderOnboarding();
+    $("#ob-startup").checked = state.startup.enabled;
+    $("#ob-startup").closest("label").classList.toggle("hidden", !state.startup.supported);
+    $(".ob-startup-note").classList.toggle("hidden", !state.startup.supported);
     $("#onboard").classList.remove("hidden");
   }
+  const page = await call("take_open_page");
+  if (page === "settings" || page === "library") showView(page);
   setInterval(refresh, 30000); // picks up the background sync's results
 });

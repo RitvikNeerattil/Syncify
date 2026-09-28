@@ -65,6 +65,7 @@ syncify/
   google_account.py      Google sign-in, token storage
   library.py             mp3 files + manifest
   metadata.py            tag guessing, ID3 read/write, cover art
+  musicbrainz.py         "is this an artist name?" lookup for Song - Artist titles
   youtube.py             yt-dlp search + mp3 rip
   tools_setup.py         first-run ffmpeg/Deno download
   paths.py               safe filenames, stay-inside-the-folder guard

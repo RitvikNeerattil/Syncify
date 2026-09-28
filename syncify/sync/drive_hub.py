@@ -5,6 +5,7 @@
         Song Title.mp3 ...          the songs (tagged with their content hash)
         _sync/
           catalog-<device>.json     each device's song list (one writer per file)
+          removed-devices.json      devices signed out remotely from another device
 
 With the drive.file scope the app only ever sees files it created.
 """
@@ -84,10 +85,13 @@ class DriveHub(Hub):
             if sha:
                 self._blobs[sha] = f
         self._catalogs = {}
+        self._removed_file = None
         for f in self._list(f"'{self.meta_id}' in parents and trashed=false"):
-            dev = (f.get("appProperties") or {}).get("device")
-            if dev:
-                self._catalogs[dev] = f
+            props = f.get("appProperties") or {}
+            if props.get("device"):
+                self._catalogs[props["device"]] = f
+            elif props.get("kind") == "removed":
+                self._removed_file = f
 
     def read_catalogs(self) -> dict[str, dict]:
         out = {}
@@ -98,8 +102,9 @@ class DriveHub(Hub):
                 log.warning("couldn't read catalog %s: %s", dev, e)
         return out
 
-    def write_catalog(self, device_id, device_name, songs):
-        data = json.dumps({"device_name": device_name, "songs": songs}, ensure_ascii=False).encode()
+    def write_catalog(self, device_id, device_name, songs, *, synced_at=None, platform=""):
+        data = json.dumps({"device_name": device_name, "synced_at": synced_at, "platform": platform,
+                           "songs": songs}, ensure_ascii=False).encode()
         existing = self._catalogs.get(device_id)
         if existing:
             self._req("PATCH", f"{UPLOAD}/files/{existing['id']}", params={"uploadType": "media"}, data=data,
@@ -108,6 +113,28 @@ class DriveHub(Hub):
             meta = {"name": f"catalog-{device_id}.json", "parents": [self.meta_id],
                     "appProperties": {"device": device_id}, "description": f"Syncify song list for {device_name}"}
             self._catalogs[device_id] = self._multipart("POST", f"{UPLOAD}/files", meta, data, "application/json")
+
+    def read_removed(self):
+        if not self._removed_file:
+            return {}
+        try:
+            return self._req("GET", f"{API}/files/{self._removed_file['id']}", params={"alt": "media"}).json()
+        except (DriveError, ValueError):
+            return {}
+
+    def _write_removed(self, removed):
+        data = json.dumps(removed).encode()
+        if self._removed_file:
+            self._req("PATCH", f"{UPLOAD}/files/{self._removed_file['id']}", params={"uploadType": "media"},
+                      data=data, headers={"Content-Type": "application/json"})
+        else:
+            meta = {"name": "removed-devices.json", "parents": [self.meta_id], "appProperties": {"kind": "removed"}}
+            self._removed_file = self._multipart("POST", f"{UPLOAD}/files", meta, data, "application/json")
+
+    def delete_catalog(self, device_id):
+        f = self._catalogs.pop(device_id, None)
+        if f:
+            self._req("PATCH", f"{API}/files/{f['id']}", json={"trashed": True})
 
     def has_blob(self, sha):
         return sha in self._blobs

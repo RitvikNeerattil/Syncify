@@ -23,8 +23,12 @@ call .venv\Scripts\activate.bat
 python -m pip install -q --upgrade pip
 python -m pip install -q -r requirements-dev.txt || (echo pip install failed & pause & exit /b 1)
 
+echo Closing any running Syncify so the exe can be replaced...
+taskkill /f /im Syncify.exe >nul 2>nul
+timeout /t 1 /nobreak >nul
+
 echo Building Syncify.exe...
-pyinstaller --noconfirm --onefile --windowed --name Syncify --icon assets\syncify.ico --add-data "ui;ui" %ADD_OAUTH% ^
+pyinstaller --noconfirm --onefile --windowed --name Syncify --icon assets\syncify.ico --add-data "ui;ui" --add-data "assets\syncify.ico;assets" %ADD_OAUTH% ^
   --hidden-import keyring.backends.Windows run.py || (echo Build failed & pause & exit /b 1)
 
 echo.

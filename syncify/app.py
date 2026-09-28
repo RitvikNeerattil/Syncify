@@ -7,7 +7,7 @@ import sys
 import threading
 from pathlib import Path
 
-from . import instance, startup
+from . import instance, notify, startup
 from .config import AppDirs
 from .core import Syncify
 
@@ -21,7 +21,8 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="syncify")
     p.add_argument("--sync-only", action="store_true", help="sync and exit, no window (used at Windows login)")
     p.add_argument("--debug", action="store_true", help="enable devtools + verbose logs")
-    args = p.parse_args(argv)
+    args, extra = p.parse_known_args(argv)
+    open_page = notify.page_from_argv(extra)  # launched from a notification: syncify://settings
 
     dirs = AppDirs()
     logging.basicConfig(
@@ -36,15 +37,24 @@ def main(argv: list[str] | None = None) -> int:
         if not args.sync_only and sys.platform == "win32":
             import ctypes
 
-            ctypes.windll.user32.MessageBoxW(None, "Syncify is already open (check your taskbar).", "Syncify", 0x40)
+            pid = instance.owner_pid(dirs.app / "instance.lock")
+            if not (pid and instance.focus_window_of(pid)):  # no window: the quiet login sync is running
+                ctypes.windll.user32.MessageBoxW(
+                    None, "Syncify is finishing a sync. Try again in a moment.", "Syncify", 0x40)
         return 0
 
     app = Syncify(dirs)
 
+    notify.register(dirs.app)
+
     if args.sync_only:
         result = app.sync_now()
         logging.info("login sync: %s", result["message"])
+        if app.settings.notify_login_sync:
+            _notify_result(app, result)
         return 0 if result.get("ok") is not False else 1
+
+    app.open_page = open_page
 
     # Keep the login-sync entry pointing at wherever the exe lives now; turn it on the first time.
     if startup.supported():
@@ -81,6 +91,19 @@ def main(argv: list[str] | None = None) -> int:
     # http_server=True serves the UI from http://127.0.0.1 so YouTube preview embeds work.
     webview.start(background_sync, http_server=True, debug=args.debug)
     return 0
+
+
+def _notify_result(app: Syncify, result: dict) -> None:
+    if app.removed_notice:
+        notify.show("Signed out of Syncify", app.removed_notice, "settings")
+    elif result.get("ok") is True:
+        n = len(app.library.visible()) if app.library else 0
+        msg = result["message"]
+        body = f"{n} songs, all up to date" if msg.startswith("Everything") else f"{msg} · {n} songs total"
+        notify.show("Sync worked", body)
+    elif result.get("ok") is False:
+        notify.show("Sync failed", "Open Syncify, go to Settings to see what went wrong.", "settings")
+    # ok is None: not signed in or no music folder yet, nothing worth a notification
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 from .config import AppDirs, Settings, write_json_atomic
-from .metadata import SongMeta, read_tags, write_tags
+from .metadata import SongMeta, audio_length, read_tags, write_tags
 from .paths import inside, unique_mp3_name
 
 # Fields that describe the song and get shared with other devices.
@@ -23,7 +23,7 @@ SHARED_FIELDS = (
     "filename", "sha256", "added_at", "added_by", "updated_at", "deleted",
 )
 # Per-device bookkeeping that never leaves this machine.
-LOCAL_FIELDS = ("mtime", "size")
+LOCAL_FIELDS = ("mtime", "size", "duration")
 
 
 def sha256_of(path: Path) -> str:
@@ -67,8 +67,18 @@ class Library:
 
     # ---------- queries ----------
     def visible(self) -> list[dict]:
+        out, filled = [], False
         with self.lock:
-            out = [dict(e, present=self.path_of(e).exists()) for e in self.songs.values() if not e.get("deleted")]
+            for e in self.songs.values():
+                if e.get("deleted"):
+                    continue
+                present = self.path_of(e).exists()
+                if present and "duration" not in e:  # songs from before lengths were tracked
+                    e["duration"] = audio_length(self.path_of(e))
+                    filled = True
+                out.append(dict(e, present=present))
+            if filled:
+                self.save()
         return sorted(out, key=lambda e: e.get("added_at", 0), reverse=True)
 
     def get(self, song_id: str) -> dict | None:
@@ -85,6 +95,7 @@ class Library:
         st = p.stat()
         entry["sha256"] = sha256_of(p)
         entry["mtime"], entry["size"] = st.st_mtime, st.st_size
+        entry["duration"] = audio_length(p)
 
     # ---------- mutations ----------
     def add_file(self, src: Path, meta: SongMeta, *, video_id: str = "", source_url: str = "",
@@ -113,7 +124,9 @@ class Library:
             path = self.path_of(entry)
             write_tags(path, meta, song_id=song_id, source_url=entry.get("source_url", ""))
             if meta.title != entry["title"] or meta.artist != entry["artist"]:
-                new_name = unique_mp3_name(self.root, meta.title, meta.artist, self._taken_names(song_id))
+                folder = Path(entry["filename"]).parent  # keep songs in their subfolder
+                taken = {Path(n).name for n in self._taken_names(song_id) if Path(n).parent == folder}
+                new_name = (folder / unique_mp3_name(self.root / folder, meta.title, meta.artist, taken)).as_posix()
                 if new_name != entry["filename"]:
                     os.replace(path, inside(self.root, new_name))
                     entry["filename"] = new_name
@@ -157,6 +170,7 @@ class Library:
                     continue
                 digest = sha256_of(p)
                 e["mtime"], e["size"] = st.st_mtime, st.st_size
+                e["duration"] = audio_length(p)
                 if digest != e.get("sha256"):
                     e.update({k: v for k, v in read_tags(p).to_dict().items() if v})
                     e["sha256"] = digest
@@ -165,6 +179,44 @@ class Library:
             if changed or self.songs:
                 self.save()
         return changed
+
+    def scan_folder(self) -> list[str]:
+        """Add mp3s that are in the music folder but not in the library yet (songs you had
+        before Syncify, or files dropped in by hand). Files are left untouched. Returns new ids."""
+        added = []
+        with self.lock:
+            known = {e["filename"].casefold() for e in self.songs.values() if not e.get("deleted")}
+            for p in sorted(self.root.rglob("*.mp3")):
+                rel = p.relative_to(self.root)
+                if any(part.startswith(".") for part in rel.parts) or not p.is_file():
+                    continue
+                name = rel.as_posix()
+                if name.casefold() in known:
+                    continue
+                tags = read_tags(p)
+                t = now()
+                sid = uuid.uuid4().hex[:12]
+                entry = {
+                    "id": sid, "video_id": "", "source_url": "",
+                    "title": tags.title or p.stem, "artist": tags.artist, "album": tags.album, "year": tags.year,
+                    "filename": name, "added_at": t, "updated_at": t,
+                    "added_by": self.settings.device_name, "deleted": False,
+                }
+                self._stamp_file(entry)
+                self.songs[sid] = entry
+                known.add(name.casefold())
+                added.append(sid)
+            if added:
+                self.save()
+        return added
+
+    def rekey(self, old_id: str, new_id: str) -> None:
+        """Another device added the exact same file under a different id; use theirs."""
+        with self.lock:
+            e = self.songs.pop(old_id)
+            e["id"] = new_id
+            self.songs[new_id] = e
+            self.save()
 
     def relocate(self, new_root: Path) -> int:
         """Switch to a different music folder, moving every managed song along. Returns songs moved."""
@@ -184,6 +236,7 @@ class Library:
                 taken = {x["filename"] for x in self.songs.values() if x is not e and not x.get("deleted")}
                 name = e["filename"] if not (new_root / e["filename"]).exists() else \
                     unique_mp3_name(new_root, e["title"], e["artist"], taken)
+                (new_root / name).parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(src), new_root / name)
                 e["filename"] = name
                 moved += 1
@@ -208,7 +261,9 @@ class Library:
             wanted = e["filename"]
             if wanted.lower() in {n.lower() for n in self._taken_names(e["id"])} or inside(self.root, wanted).exists():
                 e["filename"] = unique_mp3_name(self.root, e["title"], e["artist"], self._taken_names(e["id"]))
-            shutil.move(str(src), inside(self.root, e["filename"]))
+            dest = inside(self.root, e["filename"])
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), dest)
             self.songs[e["id"]] = e
             self._stamp_file(e)
             if redownloaded:

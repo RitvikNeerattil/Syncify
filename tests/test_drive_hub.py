@@ -127,3 +127,21 @@ def test_drive_gc_only_trashes_old_unreferenced(tmp_path):
     sync(pc, DriveHub(drive))
     live = [f["name"] for f in drive.files.values() if f["name"].endswith(".mp3") and not f["trashed"]]
     assert live == ["New.mp3"]
+
+
+def test_drive_device_removal(tmp_path):
+    from syncify.sync.engine import DeviceRemoved
+    import pytest
+
+    drive = FakeDrive()
+    pc, laptop = device(tmp_path, "pc"), device(tmp_path, "laptop")
+    sync(pc, DriveHub(drive))
+    sync(laptop, DriveHub(drive))
+    DriveHub(drive).remove_device(pc.settings.device_id, by="laptop")
+    assert not any(f["name"] == f"catalog-{pc.settings.device_id}.json" and not f["trashed"]
+                   for f in drive.files.values())
+    with pytest.raises(DeviceRemoved):
+        sync(pc, DriveHub(drive))
+    DriveHub(drive).unremove_device(pc.settings.device_id)
+    r = sync(pc, DriveHub(drive))
+    assert {d["name"] for d in r.device_list} == {"pc", "laptop"}

@@ -38,9 +38,10 @@
           <h3 id="panel-title"></h3>
           <form id="meta-form" class="meta-form">
             <label>Title<input name="title" required></label>
+            <button type="button" class="swap ghost small" title="Swap title and artist">⇅ Swap</button>
             <label>Artist<input name="artist"></label>
             <div class="row">
-              <label>Album<input name="album"></label>
+              <label>Album<input name="album" placeholder="optional"></label>
               <label class="narrow">Year<input name="year" inputmode="numeric" maxlength="4"></label>
             </div>
             <p class="small muted">Saved as <b id="filename-preview"></b> with the thumbnail as cover art.</p>
@@ -55,9 +56,29 @@
     <section id="view-library" class="view">
       <div class="lib-head">
         <input id="lib-filter" type="search" placeholder="Filter your library">
+        <select id="lib-sort" title="Sort by">
+          <option value="added">Recently added</option>
+          <option value="title">Title</option>
+          <option value="artist">Artist</option>
+          <option value="year">Year</option>
+          <option value="duration">Length</option>
+          <option value="size">File size</option>
+        </select>
+        <button id="lib-dir" class="ghost icon" title="Reverse order">↓</button>
+        <button id="rescan" class="ghost" title="Add mp3s that are in your music folder but not in the library">Scan folder</button>
         <button id="open-folder" class="ghost">Open folder</button>
       </div>
+      <div class="song head" id="lib-cols">
+        <span></span>
+        <span data-sort="title">Title</span>
+        <span data-sort="artist">Artist</span>
+        <span data-sort="year">Year</span>
+        <span data-sort="duration" class="num">Length</span>
+        <span data-sort="size" class="num">Size</span>
+        <span></span>
+      </div>
       <div id="library" class="library"></div>
+      <p id="lib-total" class="small muted"></p>
     </section>
 
     <!-- SETTINGS -->
@@ -69,7 +90,13 @@
           <span id="account-line" class="grow"></span>
           <button id="account-btn" class="ghost"></button>
         </div>
+        <p id="removed-notice" class="notice hidden"></p>
         <p id="sync-detail" class="small muted"></p>
+      </div>
+      <div class="card" id="devices-card">
+        <h3>Devices</h3>
+        <p class="small muted">Everything signed in to Syncify with this Google account. Removing a device signs it out the next time it opens Syncify. Its songs stay where they are.</p>
+        <ul id="devices" class="devices"></ul>
       </div>
       <div class="card">
         <h3>Music folder</h3>
@@ -84,6 +111,7 @@
         <h3>This computer</h3>
         <label>Name (shown to your other devices)<input id="device-name"></label>
         <label class="check"><input type="checkbox" id="startup"> Sync quietly when I log in to Windows</label>
+        <label class="check sub"><input type="checkbox" id="login-notify"> Show a notification when that sync finishes</label>
       </div>
       <div class="card">
         <h3>Tools</h3>
@@ -125,6 +153,8 @@
         <div class="step-body">
           <h3>Add it to Spotify</h3>
           <p class="small muted">In Spotify: Settings → Your Library → turn on <b>Show Local Files</b> → <b>Add a source</b> → pick the folder above. Your songs show up under Local Files.</p>
+          <label class="check ob-startup"><input type="checkbox" id="ob-startup" checked> Sync quietly when I log in to Windows</label>
+          <p class="small muted ob-startup-note">Recommended: new songs from your other computers are already there when you open Spotify.</p>
           <button id="ob-done" class="primary">Done</button>
         </div>
       </div>
@@ -138,9 +168,10 @@
     <form method="dialog" id="edit-form" class="meta-form">
       <h3>Edit song</h3>
       <label>Title<input name="title" required></label>
+      <button type="button" class="swap ghost small" title="Swap title and artist">⇅ Swap</button>
       <label>Artist<input name="artist"></label>
       <div class="row">
-        <label>Album<input name="album"></label>
+        <label>Album<input name="album" placeholder="optional"></label>
         <label class="narrow">Year<input name="year" maxlength="4"></label>
       </div>
       <div class="row end">

@@ -35,6 +35,7 @@ class Settings:
     library_path: str = ""  # the folder Spotify reads Local Files from
     account_email: str = ""
     startup_default_applied: bool = False
+    notify_login_sync: bool = True
     auto_sync_minutes: int = 10
 
 
